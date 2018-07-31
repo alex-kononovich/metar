@@ -21,6 +21,8 @@ extra-source-files:
 
 dependencies:
 - base >= 4.7 && < 5
+- bytestring
+- attoparsec
 
 ghc-options:
   - -Wall
@@ -65,3 +67,5 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - METAR
+    - tasty
+    - tasty-hspec
