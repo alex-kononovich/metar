@@ -37,7 +37,7 @@ newtype Minutes = Minutes Word deriving (Eq, Show)
 
 data WindInfo = WindInfo WindDirection WindSpeed (Maybe WindGusts) deriving (Eq, Show)
 newtype WindDirection = WindDirection Word deriving (Eq, Show)
-newtype WindSpeed = WindSpeed { unwindSpeed :: Word } deriving (Eq, Show)
+newtype WindSpeed = WindSpeed Word deriving (Eq, Show)
 newtype WindGusts = WindGusts Word deriving (Eq, Show)
 data WindSpeedUnit = KT | MPS
 
@@ -45,8 +45,8 @@ type Report = M.Map ICAOCode LocationReport
 
 data LocationReport = LocationReport
   { numRecords   :: Word
-  , lastSpeed    :: WindSpeed
-  , averageSpeed :: WindSpeed
+  , lastSpeed    :: Word
+  , averageSpeed :: Double
   } deriving (Show)
 
 --
@@ -99,20 +99,20 @@ mkMetar icaoCode timestamp windInfo =
 
 instance Semigroup LocationReport where
   r1 <> r2 = LocationReport
-    { numRecords   = nr1 + nr2
+    { numRecords   = numRecords r1 + numRecords r2
     , lastSpeed    = lastSpeed r1
-    , averageSpeed = WindSpeed $ quot (ar1 * nr1 + ar2 * nr2) (nr1 + nr2)
+    , averageSpeed = (ar1 * nr1 + ar2 * nr2) / (nr1 + nr2)
     }
     where
-      nr1 = numRecords r1
-      nr2 = numRecords r2
-      ar1 = unwindSpeed $ averageSpeed r1
-      ar2 = unwindSpeed $ averageSpeed r2
+      nr1 = fromIntegral $ numRecords r1
+      nr2 = fromIntegral $ numRecords r2
+      ar1 = averageSpeed r1
+      ar2 = averageSpeed r2
 
 addMETAR :: METAR -> Report -> Report
-addMETAR (METAR icao _ (WindInfo _ speed _)) =
+addMETAR (METAR icao _ (WindInfo _ (WindSpeed speed) _)) =
   M.insertWith (<>) icao
-    LocationReport {numRecords = 1, lastSpeed = speed, averageSpeed = speed}
+    LocationReport {numRecords = 1, lastSpeed = speed, averageSpeed = fromIntegral speed}
 
 totalRecords :: Report -> Word
 totalRecords = M.foldl' add 0
@@ -127,10 +127,10 @@ prettyReport :: Report -> String
 prettyReport r = unlines $ (prettyRecord <$> M.toList r) ++ [ total ]
   where
     prettyRecord (ICAOCode icao, locationReport) =
-      printf "% 5s: average %03d m/s, last %03d m/s" icao avgSpeed speed
+      printf "% 5s: average %03.0f m/s, last %03d m/s" icao avgSpeed speed
       where
-        speed = unwindSpeed $ lastSpeed locationReport
-        avgSpeed = unwindSpeed $ averageSpeed locationReport
+        speed = lastSpeed locationReport
+        avgSpeed = averageSpeed locationReport
     total = printf "Total: %d" $ totalRecords r
 
 prettyMETAR :: METAR -> String
