@@ -1,5 +1,8 @@
 module Main where
 
+import           Control.Monad.IO.Class                   ( MonadIO
+                                                          , liftIO
+                                                          )
 import           System.Console.ANSI                      ( clearFromCursorToScreenEnd
                                                           , cursorUpLine
                                                           )
@@ -16,22 +19,20 @@ import           Options.Applicative                      ( Parser
                                                           , fullDesc
                                                           , header
                                                           , long
+                                                          , short
                                                           , help
                                                           , flag'
+                                                          , option
                                                           , strArgument
+                                                          , str
                                                           , metavar
                                                           )
 import           Data.Attoparsec.ByteString.Char8         ( parseOnly )
 import           Data.ByteString                          ( ByteString )
-import qualified Data.ByteString.Char8         as C8
 import           Conduit                                  ( (.|)
-                                                          , runConduit
-                                                          , mapC
+                                                          , runConduitRes
                                                           )
-import           Data.Conduit.Combinators                 ( stdin
-                                                          , mapME
-                                                          , foldME
-                                                          )
+import qualified Data.Conduit.Combinators      as CC
 import qualified Data.Map.Strict               as M
 import           METAR.Parsers                            ( metarParser )
 import           METAR.Types                              ( METAR
@@ -41,23 +42,25 @@ import           METAR.Types                              ( METAR
                                                           , prettyReport
                                                           )
 
-data Mode
-  = METARInput ByteString
-  | StreamSTDIN
+data Input
+  = Arg ByteString
+  | Stdin
+  | File String
   deriving (Show)
 
-opts :: ParserInfo Mode
-opts = info (modeParser <**> helper)
+opts :: ParserInfo Input
+opts = info (inputParser <**> helper)
             (fullDesc <> header "METAR records parsing and reporting")
 
-modeParser :: Parser Mode
-modeParser = metarInput <|> streamStdin
+inputParser :: Parser Input
+inputParser = arg <|> standardInput <|> fileInput
  where
-  metarInput  = METARInput <$> strArgument (metavar "METAR")
-  streamStdin = flag' StreamSTDIN (long "stdin" <> help "Read from stdin")
+  arg  = Arg <$> strArgument (metavar "METAR")
+  standardInput = flag' Stdin (long "stdin" <> help "Read from stdin")
+  fileInput = File <$> option str (short 'f' <> help "Read from this file")
 
 -- fail early if there is parsing error
-parseMETAR :: ByteString -> IO METAR
+parseMETAR :: Monad m => ByteString -> m METAR
 parseMETAR input =
   case parseOnly metarParser input of
     Right metar -> return metar
@@ -67,14 +70,19 @@ parseMETAR input =
       , show e
       ]
 
-processMETAR :: Report -> METAR -> IO Report
+processMETAR :: MonadIO m => Report -> METAR -> m Report
 processMETAR report metar = do
   let newReport = addMETAR report metar
-
-  clearPreviousReport report
-  printReport newReport
-
+  liftIO $ printReport report newReport
   return newReport
+
+printMETAR :: METAR -> IO ()
+printMETAR = putStrLn . prettyMETAR
+
+printReport :: Report -> Report -> IO ()
+printReport old new = do
+  clearPreviousReport old
+  putStr $ prettyReport new
 
 clearPreviousReport :: Report -> IO ()
 clearPreviousReport report =
@@ -86,22 +94,18 @@ clearPreviousReport report =
   where
     reportSize = M.size report
 
-printMETAR :: METAR -> IO ()
-printMETAR = putStrLn . prettyMETAR
-
-printReport :: Report -> IO ()
-printReport = putStr . prettyReport
-
 main :: IO ()
 main = do
-  mode <- customExecParser (prefs showHelpOnError) opts
-  case mode of
-    METARInput input -> parseMETAR input >>= printMETAR
-    StreamSTDIN      -> do
-      report <- runConduit
-         $ stdin
-        .| mapC C8.lines
-        .| mapME parseMETAR
-        .| foldME processMETAR M.empty
-      clearPreviousReport report
-      printReport report
+  input <- customExecParser (prefs showHelpOnError) opts
+  case input of
+    Arg i  -> parseMETAR i >>= printMETAR
+    File f -> processStream (CC.sourceFile f)
+    Stdin  -> processStream CC.stdin
+  where
+    processStream source  = do
+      report <- runConduitRes
+         $ source
+        .| CC.linesUnboundedAscii
+        .| CC.mapM (liftIO . parseMETAR)
+        .| CC.foldM processMETAR M.empty
+      printReport report report
