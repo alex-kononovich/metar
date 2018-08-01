@@ -24,6 +24,7 @@ dependencies:
 - bytestring
 - attoparsec
 - containers
+- QuickCheck
 
 ghc-options:
   - -Wall
@@ -56,6 +57,8 @@ executables:
     source-dirs:         app/metar-generate
     dependencies:
     - METAR
+    - optparse-applicative
+    - conduit
     ghc-options:
     - -threaded
     - -rtsopts

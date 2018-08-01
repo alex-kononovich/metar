@@ -2,6 +2,7 @@ module METAR.Types
   ( METAR(METAR)
   , mkMetar
   , prettyMETAR
+  , formatMETAR
   , ICAOCode
   , mkICAOCode
   , Timestamp
@@ -23,6 +24,7 @@ import           Data.Char                                ( isUpper )
 import           Text.Printf                              ( printf )
 import           Data.Semigroup                           ( Semigroup )
 import qualified Data.Map.Strict               as M
+import qualified Test.QuickCheck               as QC
 
 data METAR = METAR ICAOCode Timestamp WindInfo deriving (Eq, Show)
 
@@ -51,6 +53,15 @@ data LocationReport = LocationReport
 -- Smart constructors
 --
 
+dayRange :: (Word, Word)
+dayRange = (1, 31)
+
+hoursRange :: (Word, Word)
+hoursRange = (0, 23)
+
+minutesRange :: (Word, Word)
+minutesRange = (0, 59)
+
 mkICAOCode :: String -> Either String ICAOCode
 mkICAOCode code
   | null code              = Left "ICAO code should contain at least 1 letter"
@@ -60,10 +71,10 @@ mkICAOCode code
 mkTimestamp :: Word -> Word -> Word -> Either String Timestamp
 mkTimestamp d h m = Timestamp <$> day <*> hours <*> minutes
  where
-  day     = Day <$> checkRange "day" 1 31 d
-  hours   = Hours <$> checkRange "hours" 0 23 h
-  minutes = Minutes <$> checkRange "minutes" 0 59 m
-  checkRange label lower upper x = 
+  day     = Day <$> checkRange "day" dayRange d
+  hours   = Hours <$> checkRange "hours" hoursRange h
+  minutes = Minutes <$> checkRange "minutes" minutesRange m
+  checkRange label (lower, upper) x =
     if x >= lower && x <= upper
       then Right x
       else Left errorText
@@ -137,4 +148,46 @@ prettyMETAR (METAR (ICAOCode i) t w) =
   prettyWindDirection (WindDirection d) = printf "wind from %d°" d
   prettyWindSpeed (WindSpeed s)         = printf "speed %d m/s" s
   prettyWindGusts (WindGusts g)         = printf "gusts up to %d m/s" g
+
+formatMETAR :: METAR -> String
+formatMETAR (METAR (ICAOCode i) (Timestamp (Day d) (Hours h) (Minutes m)) (WindInfo (WindDirection dir) (WindSpeed s) g))
+  = printf "%s %02d%02d%02dZ %03d%02d%sMPS" i d h m dir s (formatWindGusts g)
+ where
+  formatWindGusts Nothing                  = ""
+  formatWindGusts (Just (WindGusts gusts)) = printf "G%02d" gusts
+
+--
+-- QuickCheck instances
+--
+
+instance QC.Arbitrary METAR where
+  arbitrary = METAR <$> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary
+
+instance QC.Arbitrary ICAOCode where
+  arbitrary = ICAOCode <$> QC.elements
+    ["KATL", "ZBAA", "OMDB", "RJTT", "KLAX", "KORD", "EGLL", "VHHH", "ZSPD", "LFPG"]
+
+instance QC.Arbitrary Timestamp where
+  arbitrary = Timestamp <$> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary
+
+instance QC.Arbitrary Day where
+  arbitrary = Day <$> QC.choose dayRange
+
+instance QC.Arbitrary Hours where
+  arbitrary = Hours <$> QC.choose hoursRange
+
+instance QC.Arbitrary Minutes where
+  arbitrary = Minutes <$> QC.choose minutesRange
+
+instance QC.Arbitrary WindInfo where
+  arbitrary = WindInfo <$> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary
+
+instance QC.Arbitrary WindDirection where
+  arbitrary = WindDirection <$> QC.choose (0, 360)
+
+instance QC.Arbitrary WindSpeed where
+  arbitrary = WindSpeed <$> QC.choose (0, 50)
+
+instance QC.Arbitrary WindGusts where
+  arbitrary = WindGusts <$> QC.choose (0, 99)
 
