@@ -1,6 +1,7 @@
 module METAR.Types
   ( METAR(METAR)
   , mkMetar
+  , prettyMETAR
   , ICAOCode
   , mkICAOCode
   , Timestamp
@@ -11,8 +12,11 @@ module METAR.Types
   )
 where
 
+import           Data.Maybe                               ( catMaybes )
+import           Data.List                                ( intercalate )
 import           Data.Word                                ( Word )
 import           Data.Char                                ( isUpper )
+import           Text.Printf                              ( printf )
 
 data METAR = METAR ICAOCode Timestamp WindInfo deriving (Eq, Show)
 
@@ -28,6 +32,21 @@ newtype WindDirection = WindDirection Word deriving (Eq, Show)
 newtype WindSpeed = WindSpeed Word deriving (Eq, Show)
 newtype WindGusts = WindGusts Word deriving (Eq, Show)
 data WindSpeedUnit = KT | MPS
+
+prettyMETAR :: METAR -> String
+prettyMETAR (METAR (ICAOCode i) t w) =
+  i ++ ": " ++ prettyTimestamp t ++ ", " ++ prettyWindInfo w
+ where
+  prettyTimestamp (Timestamp (Day d) (Hours h) (Minutes m)) =
+    printf "day %02d, time %02d:%02d" d h m
+  prettyWindInfo (WindInfo d s g) = (intercalate ", " . catMaybes)
+    [ Just $ prettyWindDirection d
+    , Just $ prettyWindSpeed s
+    , prettyWindGusts <$> g
+    ]
+  prettyWindDirection (WindDirection d) = printf "wind from %d°" d
+  prettyWindSpeed (WindSpeed s)         = printf "speed %d m/s" s
+  prettyWindGusts (WindGusts g)         = printf "gusts up to %d m/s" g
 
 mkICAOCode :: String -> Either String ICAOCode
 mkICAOCode code

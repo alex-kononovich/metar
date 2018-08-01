@@ -43,6 +43,7 @@ executables:
     source-dirs:         app/metar
     dependencies:
     - METAR
+    - optparse-applicative
     ghc-options:
     - -threaded
     - -rtsopts
