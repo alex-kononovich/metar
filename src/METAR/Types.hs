@@ -109,11 +109,10 @@ instance Semigroup LocationReport where
       ar1 = unwindSpeed $ averageSpeed r1
       ar2 = unwindSpeed $ averageSpeed r2
 
-addMETAR :: Report -> METAR -> Report
-addMETAR report (METAR icao _ (WindInfo _ speed _)) =
+addMETAR :: METAR -> Report -> Report
+addMETAR (METAR icao _ (WindInfo _ speed _)) =
   M.insertWith (<>) icao
     LocationReport {numRecords = 1, lastSpeed = speed, averageSpeed = speed}
-    report
 
 totalRecords :: Report -> Word
 totalRecords = M.foldl' add 0

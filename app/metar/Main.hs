@@ -1,5 +1,16 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Main where
 
+import           Control.Concurrent                       ( MVar
+                                                          , newMVar
+                                                          , modifyMVar_
+                                                          , readMVar
+                                                          , forkIO
+                                                          , threadDelay
+                                                          , killThread
+                                                          , myThreadId
+                                                          )
 import           Control.Monad.IO.Class                   ( MonadIO
                                                           , liftIO
                                                           )
@@ -42,6 +53,8 @@ import           METAR.Types                              ( METAR
                                                           , prettyReport
                                                           )
 
+data State = Running | StopUI | StopMain
+
 data Input
   = Arg ByteString
   | Stdin
@@ -70,19 +83,23 @@ parseMETAR input =
       , show e
       ]
 
-processMETAR :: MonadIO m => Report -> METAR -> m Report
-processMETAR report metar = do
-  let newReport = addMETAR report metar
-  liftIO $ printReport report newReport
-  return newReport
+processMETAR :: MonadIO m => MVar Report -> ByteString -> m ()
+processMETAR mReport s = do
+  metar <- parseMETAR s
+  liftIO $ modifyMVar_ mReport (return . addMETAR metar)
 
 printMETAR :: METAR -> IO ()
 printMETAR = putStrLn . prettyMETAR
 
-printReport :: Report -> Report -> IO ()
-printReport old new = do
-  clearPreviousReport old
-  putStr $ prettyReport new
+printReport :: MVar Report -> Report -> IO Report
+printReport mReport oldReport = do
+  newReport <- readMVar mReport
+  if M.size newReport == 0
+    then return newReport
+    else do
+      clearPreviousReport oldReport
+      putStr $ prettyReport newReport
+      return newReport
 
 clearPreviousReport :: Report -> IO ()
 clearPreviousReport report =
@@ -94,18 +111,39 @@ clearPreviousReport report =
   where
     reportSize = M.size report
 
+updateUI :: MVar State -> MVar Report -> Report -> IO ()
+updateUI mState mReport oldReport = do
+  report <- printReport mReport oldReport
+  threadDelay 300000
+  readMVar mState >>= \case
+    Running -> updateUI mState mReport report
+    StopUI -> do
+      _ <- printReport mReport report
+      modifyMVar_ mState (return . const StopMain)
+      myThreadId >>= killThread
+    _ -> return ()
+
+waitForExit :: MVar State -> IO ()
+waitForExit mState =
+  readMVar mState >>= \case
+    StopMain -> return ()
+    _ -> threadDelay 100000 >> waitForExit mState
+
 main :: IO ()
-main = do
-  input <- customExecParser (prefs showHelpOnError) opts
-  case input of
+main =
+  customExecParser (prefs showHelpOnError) opts >>= \case
     Arg i  -> parseMETAR i >>= printMETAR
     File f -> processStream (CC.sourceFile f)
     Stdin  -> processStream CC.stdin
   where
+    initialReport = M.empty
     processStream source  = do
-      report <- runConduitRes
+      mReport <- newMVar initialReport
+      mState <- newMVar Running
+      _ <- forkIO (updateUI mState mReport initialReport)
+      runConduitRes
          $ source
         .| CC.linesUnboundedAscii
-        .| CC.mapM (liftIO . parseMETAR)
-        .| CC.foldM processMETAR M.empty
-      printReport report report
+        .| CC.mapM_ (processMETAR mReport)
+      modifyMVar_ mState (return . const StopUI)
+      waitForExit mState
