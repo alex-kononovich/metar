@@ -23,6 +23,7 @@ dependencies:
 - base >= 4.7 && < 5
 - bytestring
 - attoparsec
+- containers
 
 ghc-options:
   - -Wall
@@ -44,6 +45,8 @@ executables:
     dependencies:
     - METAR
     - optparse-applicative
+    - conduit
+    - ansi-terminal
     ghc-options:
     - -threaded
     - -rtsopts
