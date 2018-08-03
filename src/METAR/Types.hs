@@ -44,9 +44,9 @@ data WindSpeedUnit = KT | MPS
 type Report = M.Map ICAOCode LocationReport
 
 data LocationReport = LocationReport
-  { numRecords   :: Word
-  , lastSpeed    :: Word
-  , averageSpeed :: Double
+  { numRecords   :: !Word
+  , lastSpeed    :: !Word
+  , averageSpeed :: !Double
   } deriving (Show)
 
 --

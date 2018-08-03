@@ -2,6 +2,7 @@
 
 module Main where
 
+import           Control.Exception                        ( evaluate )
 import           Control.Concurrent                       ( MVar
                                                           , newMVar
                                                           , modifyMVar_
@@ -84,7 +85,7 @@ parseMETAR input =
 processMETAR :: MonadIO m => MVar Report -> ByteString -> m ()
 processMETAR mReport s = do
   metar <- parseMETAR s
-  liftIO $ modifyMVar_ mReport (return . addMETAR metar)
+  liftIO $ modifyMVar_ mReport (evaluate . addMETAR metar)
 
 printMETAR :: METAR -> IO ()
 printMETAR = putStrLn . prettyMETAR
