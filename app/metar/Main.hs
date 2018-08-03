@@ -8,8 +8,6 @@ import           Control.Concurrent                       ( MVar
                                                           , readMVar
                                                           , forkIO
                                                           , threadDelay
-                                                          , killThread
-                                                          , myThreadId
                                                           )
 import           Control.Monad.IO.Class                   ( MonadIO
                                                           , liftIO
@@ -120,7 +118,6 @@ updateUI mState mReport oldReport = do
     StopUI -> do
       _ <- printReport mReport report
       modifyMVar_ mState (return . const StopMain)
-      myThreadId >>= killThread
     _ -> return ()
 
 waitForExit :: MVar State -> IO ()
