@@ -1,4 +1,5 @@
 STACK_PROFILE=stack --work-dir .stack-work-profile
+PROFILE_OPTS=+RTS -p -hc -L100 -RTS
 N=30000
 TEST_OUTPUT=test.txt
 
@@ -9,12 +10,12 @@ clean: profile-clean
 profile: profile-metar-generate profile-metar
 
 profile-metar: install-hp2pretty profile-build
-	$(STACK_PROFILE) exec metar -- +RTS -p -hc -RTS -f $(TEST_OUTPUT)
+	$(STACK_PROFILE) exec metar -- $(PROFILE_OPTS) -f $(TEST_OUTPUT)
 	hp2pretty metar.hp
 
 profile-metar-generate: install-hp2pretty profile-build
 	@rm -f $(TEST_OUTPUT)
-	$(STACK_PROFILE) exec metar-generate -- +RTS -p -hc -RTS -n $(N) -f $(TEST_OUTPUT)
+	$(STACK_PROFILE) exec metar-generate -- $(PROFILE_OPTS) -n $(N) -f $(TEST_OUTPUT)
 	hp2pretty metar-generate.hp
 
 profile-build:
